@@ -1,4 +1,5 @@
 # A Breath of Trouble-Exploring the Impact of Tobacco on Coronary Health
+![GitHub Logo](https://www.google.com/url?sa=i&url=https%3A%2F%2Funsplash.com%2Fphotos%2Fhands-formed-together-with-red-heart-paint-cAtzHUz7Z8g&psig=AOvVaw3bJEXw1-bNg3feW0Rnyz0E&ust=1713278395000000&source=images&cd=vfe&opi=89978449&ved=0CBIQjRxqFwoTCKiS_cO5xIUDFQAAAAAdAAAAABAE)
 
 What link exists between smoking and cardiovascular disease?
 According to the 2014 Surgeon General's Report on smoking and health, smoking is a major cause of
