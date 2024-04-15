@@ -1,5 +1,5 @@
 # A Breath of Trouble-Exploring the Impact of Tobacco on Coronary Health
-![GitHub Logo](https://unsplash.com/photos/hands-formed-together-with-red-heart-paint-cAtzHUz7Z8g)
+![GitHub Logo](https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D)
 
 
 What link exists between smoking and cardiovascular disease?
