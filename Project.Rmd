@@ -1,0 +1,453 @@
+---
+title: "Project"
+author: "Balambika Baskaran"
+date: "2024-03-21"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(broom)
+library(report)
+library(readr)
+library(tidymodels)
+library(stargazer)
+library(ggcorrplot)
+library(caret)
+library(jtools)
+library(foreign)
+library(glmnet)
+library(formatR)
+library(rstan)
+library(mlbench)
+library(ISLR2)
+library(ISLR)
+```
+
+```{r}
+set.seed(123)
+df= read.csv('C:/Users/91979/Desktop/MSCI 718/Mine/Project/saheart_1 withheader.csv')
+```
+
+```{r}
+glimpse(df)
+```
+
+```{r}
+# Assuming df is your dataframe and it has a column named 'age'
+
+# Define the breaks for age intervals (note the upper limit is inclusive)
+breaks = c(15, 24, 34, 44, 54, 64)
+
+# Define labels for the intervals
+labels = c('Young', 'Adult', 'Middle-aged', 'Senior', 'Elderly')
+
+# Create a factor with age group labels
+df$age_group = cut(df$age, breaks = breaks, labels = labels, include.lowest = TRUE, right = FALSE)
+
+# If you also want to assign numbers (1 to 5) to these groups as in your Python code
+# You can do this by transforming the factor levels into numeric values
+df$age_group_number = as.integer(df$age_group)
+
+# Checking the results for a sample of 20 rows
+sample_n(df, 20)
+
+```
+```{r}
+
+# Change class values from -1 to 0
+df$CLASS[df$CLASS == -1] <- 0
+names(df)[names(df) == "CLASS"] <- "y"
+head(df)
+df$age_f <- as.factor(df$age_group_number)
+df$famhist_f <- as.factor(df$famhist)
+df$y <- as.factor(df$y)
+```
+CHECKING IF AGE IS A CONFOUNDER
+```{r}
+# Load necessary library
+library(glm2)  # For logistic regression
+
+# Assuming 'data' is your dataframe with variables: CHD status, Age, SBP, Tobacco, etc.
+# Example variable names: chd_status, age, sbp, tobacco, ldl, adiposity, alcohol
+
+# Model 1: Without Age
+model_without_age <- glm(y ~  tobacco , 
+                         data = df, 
+                         family = binomial())
+
+# Model 2: With Age
+model_with_age <- glm(y ~  tobacco  + as.factor(age_group_number), 
+                      data = df, 
+                      family = binomial())
+
+# Compare models
+summary(model_without_age)
+summary(model_with_age)
+
+```
+
+POTENTIAL MEDIATORS
+```{r}
+#library(mediation)
+#model_no_m <- glm(y ~ tobacco,  family=binomial(link = "logit"), data=df)
+
+#model_m <- glm(y ~tobacco + sbp, 
+#              family=binomial(link = "logit"),
+#              data=df)
+
+#med_out <- mediate(model_no_m, model_m, treat = "tobacco", mediator = "sbp")
+#summary(med_out)
+
+```
+
+Interpretation
+The mediation analysis suggests that systolic blood pressure (sbp) does not significantly mediate the relationship between Type-A behavior (typea) and the outcome variable (y). The direct effect of Type-A behavior on the outcome is significant, but the mediated effect through systolic blood pressure is negligible.
+The total effect of Type-A behavior on the outcome is significant, indicating that factors other than systolic blood pressure may be more important mediators or that the effect is primarily direct.
+
+
+
+
+CHECKING FOR POTENTIAL MODERATORS
+Family History could be a potential moderator . Those with a family history of Coronary heart disease(CHD) could have a stronger chance of having CHD due to different ldl levels.
+Thus, we introduce interaction term, ldl* famhist_f
+```{r}
+model_no_mod <- glm(y~tobacco+ famhist_f+age_f +ldl,
+                 family=binomial(link = "logit"),
+                 data=df)
+model_mod <- glm(y ~ tobacco  + age_f + ldl*famhist_f  , 
+             family=binomial(link = "logit"),
+             data=df)
+summary(model_no_mod)
+
+```
+
+
+```{r}
+summary(model_mod)
+```
+
+
+MODEL SELECTION
+
+```{r}
+model_1 <- glm(y ~ sbp + tobacco + ldl + adiposity + famhist_f + typea + obesity + alcohol+age_f,                           family=binomial(link = "logit"),
+                          data=df)
+summary(model_1)
+```
+
+
+```{r}
+model_2 <- glm(y ~ tobacco + ldl + famhist_f + typea + obesity + age_f, 
+              family=binomial(link = "logit"),
+              data=df)
+summary(model_2)
+```
+
+```{r}
+# perform the LRT
+anova(model_2, model_1, test = "LRT")
+```
+
+p-value > 0.05 so implies both models are not significantly different. So not including the 3 predictors is the same as including them, Therefore, we can move forward with the simpler model_2.
+
+Also obesity predictor has a p-value<0.05. We can remove it and check.
+```{r}
+model_3 <- glm(y ~ tobacco + ldl + famhist_f + typea  + age_f, 
+              family=binomial(link = "logit"),
+              data=df)
+summary(model_3)
+```
+```{r}
+anova(model_2, model_3, test = "LRT")
+```
+So we can indeed remove the Obesity predictor since p-value > 0.05.
+
+
+```{r}
+model_4<- glm(y~tobacco + ldl + famhist_f + typea + age_f + ldl*famhist_f, data=df, family=binomial(link='logit'))
+
+```
+
+
+```{r}
+anova(model_3, model_4, test = "LRT")
+```
+
+We reject the null hypothesis that model_3 fits the same as model_4.
+So we must include the interaction term.
+
+
+
+STEP REGRESSION
+
+```{r}
+#fit a null model, including the intercept
+heart_empty <- glm(y ~ 1,family=binomial(link = "logit"),data=df)
+
+#fit a full model, including the interaction
+heart_full <- glm(y ~ sbp + tobacco + ldl + adiposity + famhist_f + typea + obesity + alcohol + age_f + ldl*famhist_f, family=binomial(link = "logit"),data=df)
+
+h <- step(heart_full, scope = list(upper=heart_full),direction = c("backward"), k=2, trace=0)
+summary(h)
+```
+
+10-FOLD CROSS-VALIDATION
+```{r}
+library(caret)
+
+# Define control parameters for cross-validation
+control <- trainControl(method = "cv", number = 10) # 10-fold CV
+
+# Fit the model with cross-validation
+cv_model <- train(y ~ tobacco + ldl + famhist_f +typea + age_f + ldl:famhist_f, 
+                  data = df, 
+                  method = "glm", 
+                  family = binomial(link = "logit"), 
+                  trControl = control)
+
+# Review cross-validation results
+print(cv_model)
+
+```
+```{r}
+# Fit the model with cross-validation
+cv_model_2 <- train(y ~ . , 
+                  data = df, 
+                  method = "glm", 
+                  family = binomial(link = "logit"), 
+                  trControl = control)
+
+# Review cross-validation results
+print(cv_model_2)
+```
+
+
+```{r}
+library(pROC)
+
+roc1 <- roc(df$y, predict(h, type="response"))
+roc2 <- roc(df$y, predict(heart_full, type="response"))
+
+auc1 <- auc(roc1)
+auc2 <- auc(roc2)
+
+print(auc1)
+print(auc2)
+
+# Plot ROC curves for comparison
+plot(roc1, col="red")
+plot(roc2, add=TRUE, col="blue")
+legend("bottomright", legend=c("Model 1", "Model 2"), col=c("red", "blue"), lwd=2)
+
+```
+Both Model 1 and Model 2 follow a similar path, lying well above the 45-degree line, which indicates that both models have good discriminative abilities.
+The curves for both models reach high sensitivity and specificity values, suggesting that both models can effectively distinguish between the two classes of the outcome variable.
+Model 1 (in red) and Model 2 (in blue) are nearly superimposed on each other, suggesting that their performance is very similar across the range of thresholds.
+Since both curves are close to the upper left corner, both models achieve a high TPR with a low FPR.
+
+
+AUC of 0.7973 (Model 1): This suggests that there's approximately a 79.73% chance that the model will correctly discriminate between a randomly chosen positive instance and a negative instance. This is considered a good performance, although there's still room for improvement.
+
+AUC of 0.8029 (Model 2): Similarly, this model has about an 80.29% chance of correctly distinguishing between positive and negative cases. This performance is slightly better than that of Model 1, indicating a slightly higher diagnostic ability
+
+Both models are fairly close in terms of their AUC values, which means they have similar diagnostic abilities. The difference in AUC between the two models is only 0.0056 (or 0.56%), which is quite small. In practice, such a small difference might not be considered significant enough to prefer one model over the other based solely on AUC.
+
+An AUC value between 0.7 to 0.8 is generally considered acceptable, between 0.8 to 0.9 is considered excellent, and above 0.9 is outstanding.
+
+Considering these models are close to the 0.8 threshold, they are both performing well.
+```{r}
+library(caret)
+
+# Define control parameters for cross-validation
+control <- trainControl(method="cv", number=10) # Example: 10-fold CV
+
+# Compare models with cross-validation
+cv_model1 <- train(form = y ~ ., data = df, method = "glm", family = "binomial", trControl = control)
+cv_model2 <- train(form = y ~ tobacco + ldl + famhist_f + typea + age_f + ldl:famhist_f, data = df, method = "glm", family = "binomial", trControl = control)
+
+# Print results
+print(cv_model1$results)
+print(cv_model2$results)
+
+```
+
+```{r}
+library(brms)
+
+#  original model with initial priors
+fit_original <- brm(
+  y ~  tobacco+ ldl  + famhist_f+ typea + age_f + ldl*famhist_f ,  # Using all other variables as predictors
+  data = df,
+  family = bernoulli(link='logit'),  # Logistic regression
+  prior = c(
+    set_prior("normal(0, 2.5)", class = "Intercept"),
+    set_prior("normal(0, 1)", class = "b")  
+  ),
+  warmup = 500, 
+  iter = 2000, 
+  chains = 2, 
+  cores=3,
+  seed = 123  # For reproducibility
+)
+
+```
+
+```{r}
+# model with more conservative priors (i.e., more variance)
+fit_conservative <- update(
+  fit_original,
+  prior = c(
+    set_prior("normal(0, 5)", class = "Intercept"),
+    set_prior("normal(0, 2.5)", class = "b")
+  )
+)
+
+# model with more informative priors
+fit_informative <- update(
+  fit_original,
+  prior = c(
+    set_prior("normal(0, 1)", class = "Intercept"),
+    set_prior("normal(0, 0.5)", class = "b")
+  )
+)
+
+```
+
+```{r}
+summary(fit_original)
+```
+
+
+```{r}
+
+# Coefficients from your model
+coefficients <- c(Intercept = -4.51, tobacco = 0.11, ldl = 0.05, famhist_f1 = -0.58, 
+                  typea = 0.03, age_f2 = 0.43, age_f3 = 0.78, age_f4 = 0.72, 
+                  age_f5 = 1.57, ldl_famhist_f1 = 0.32)
+
+# Calculate odds ratios
+odds_ratios <- exp(coefficients)
+
+# Print odds ratios
+as.data.frame(odds_ratios)
+
+```
+```{r}
+# Odds ratios for each predictor
+odds_ratios <- c(
+  Intercept = 0.01099846,
+  tobacco = 1.11627807,
+  ldl = 1.05127110,
+  famhist_f1 = 0.55989837,
+  typea = 1.03045453,
+  age_f2 = 1.53725752,
+  age_f3 = 2.18147227,
+  age_f4 = 2.05443321,
+  age_f5 = 4.80664819,
+  ldl_famhist_f1 = 1.37712776
+)
+
+# Convert odds ratios to percentage change
+percentage_change <- sapply(odds_ratios, function(or) {
+
+    return((or - 1) * 100)}
+)
+
+# Convert to a data frame for easier reading
+percentage_change_df <- as.data.frame(percentage_change)
+names(percentage_change_df) <- "Percentage Change"
+
+# Adding a sign to indicate increase or decrease
+percentage_change_df$Change <- ifelse(percentage_change_df$`Percentage Change` > 0, "Increase", "Decrease")
+percentage_change_df$`Percentage Change` <- abs(percentage_change_df$`Percentage Change`)
+
+# Print the data frame
+as.data.frame(percentage_change_df)
+```
+```{r}
+library(loo)
+loo_f <-loo(fit_original )
+loo_not_f <- loo(fit_conservative)
+loo_compare(loo_f, loo_not_f)
+```
+```{r}
+loo_f <-loo(fit_original )
+loo_not_f <- loo(fit_informative)
+loo_compare(loo_f, loo_not_f)
+```
+
+
+```{r}
+summary(fit_conservative)
+```
+
+```{r}
+summary(fit_informative)
+
+
+```
+
+
+
+
+
+```{r}
+# Posterior predictive check for the original model
+pp_check(fit_original, nsamples=100)
+
+# You might want to do this for each model and compare
+pp_check(fit_conservative)
+
+pp_check(fit_informative)
+```
+
+
+
+
+
+
+
+```{r}
+stanplot(fit_original, type="trace")
+```
+
+
+
+
+```{r}
+model_no_m <- glm(y ~ age_f, 
+              family=binomial(link = "logit"),
+              data=df)
+
+model_m <- glm(y ~age_f + alcohol, 
+              family=binomial(link = "logit"),
+              data=df)
+
+med_out <- mediate(model_no_m, model_m, treat = "age_f", mediator = "alcohol")
+summary(med_out)
+```
+
+```{r}
+model_ob <- glm(y ~age_f + obesity, 
+              family=binomial(link = "logit"),
+              data=df)
+model_fam <- glm(y ~age_f , 
+              family=binomial(link = "logit"),
+              data=df)
+```
+
+```{r}
+summary(model_ob)
+
+```
+
+
+```{r}
+summary(model_fam)
+```
+
